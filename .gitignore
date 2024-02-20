@@ -1,0 +1,8 @@
+## Editor directory
+**/.vscode
+
+## Ignore NPM 'node_modules' directory
+**/node_modules
+
+examples.js
+**/public
