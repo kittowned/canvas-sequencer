@@ -27,7 +27,6 @@ TODO: add pause() - done
 TODO: replace direction setter with setDirection() method, cleaner - done
 TODO: implement play() fallback if frames aren't loaded yet - done
 TODO: calculate size based on cover/contain/auto
-TODO: change loop to accomodate numerical values, to loop x number of times
 TODO: implement tick() and speed property to control player speed
 TODO: implement seek(), calculate progress in percentages?
 TODO: add event methods (onComplete, onLoopComplete, onEnterFrame, onSegmentStart)
@@ -48,8 +47,8 @@ class SequencerBase implements Options {
     debug: boolean = true;
     _direction: Direction = 'normal';
     _framesLoaded: boolean = false;
-    _drawWidth: number = 0;
-    _drawHeight: number = 0;
+    _frameWidth: number = 0;
+    _frameHeight: number = 0;
     _dWidth: number = 0;
     _dHeight: number = 0;
     onLoaded?: Function;
@@ -117,7 +116,7 @@ class SequencerBase implements Options {
     pause() {
         cancelAnimationFrame(this.currentRAF);
         if (this.onPaused) this.onPaused();
-        if (this.debug) console.log('completed');
+        if (this.debug) console.log('paused');
     }
 
     stop() {
@@ -142,28 +141,52 @@ class SequencerBase implements Options {
     }
 
     resizeCanvas() {
+
+        this._frameWidth = this.frames[0] instanceof HTMLImageElement ? this.frames[0].width : 0;
+        this._frameHeight = this.frames[0] instanceof HTMLImageElement ? this.frames[0].height : 0;
         if (this.size === 'cover') {
-            this._drawWidth = this.frames[0] instanceof HTMLImageElement ? this.frames[0].width : 0;
-            this._drawHeight = this.frames[0] instanceof HTMLImageElement ? this.frames[0].height : 0;
 
-            if (this._drawWidth === this.width) {
-                this._dWidth = this.width;
-            }
-            if (this._drawWidth < this.width) {
-                this._dWidth = this._drawWidth;
-            }
-            if (this._drawWidth > this.width) {
-                this._dWidth = this.width;
-            }
+            // if (this._drawWidth === this.width) {
+            //     this._dWidth = this.width;
+            // }
+            // if (this._drawWidth < this.width) {
+            //     this._dWidth = this._drawWidth;
+            // }
+            // if (this._drawWidth > this.width) {
+            //     this._dWidth = this.width;
+            // }
 
-            if (this._drawHeight === this.height) {
-                this._dHeight = this.height;
-            }
-            if (this._drawHeight < this.height) {
-                this._dHeight = this._drawHeight;
-            }
-            if (this._drawHeight > this.height) {
-                this._dHeight = this.height;
+            // if (this._drawHeight === this.height) {
+            //     this._dHeight = this.height;
+            // }
+            // if (this._drawHeight < this.height) {
+            //     this._dHeight = this._drawHeight;
+            // }
+            // if (this._drawHeight > this.height) {
+            //     this._dHeight = this.height;
+            // }
+
+            // ratio of canvas width to image width
+            // ratio of canvas height to image height
+            // if(ratio of width is < ratio of height) {
+            // imagewidth = canvaswidth
+            // imageheight = imageheight / ratio of width;
+            // } else {
+            //         imageheight = canvasheight
+            //          imagewidth = imagewidth / ratio of height; 
+            //}
+
+            const widthRatio = this._frameWidth / this.width;
+            const heightRatio = this._frameHeight / this.height;
+            console.log('canvas width:', this.width, 'canvas height:', this.height)
+            console.log('image width:', this._frameWidth, 'image height:', this._frameHeight)
+            console.log('width ratio:', widthRatio, 'height ratio:', heightRatio);
+            if (widthRatio < heightRatio) {
+                this._frameWidth = this.width;
+                this._frameHeight = this._frameHeight / widthRatio;
+            } else {
+                this._frameHeight = this.height;
+                this._frameWidth = this._frameWidth / heightRatio;
             }
 
         }
@@ -200,23 +223,24 @@ class SequencerBase implements Options {
         });
     }
 
-    play() {
-        if (!this._framesLoaded) return this.autoplay = true; // guard in case play() was called before loaded event
+    play(): void | boolean {
+        if (!this._framesLoaded) return this.autoplay = true;
 
         if (this.currentFrame === this.lastFrameIndex) {
             this.stop();
 
-            if (this.loop) return this.replay();
+            if (this.loop) return this.play();
             return;
         }
 
         // this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, 0)
-        this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, 0, this._drawWidth, this._drawHeight, 0, 0, this._dWidth, this._dHeight)
+        this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, 0, this._frameWidth, this._frameHeight)
         this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
         this.currentRAF = requestAnimationFrame(this.play.bind(this))
     }
 
     replay() {
+        this.stop();
         this.play();
     }
 }
