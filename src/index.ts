@@ -4,6 +4,7 @@ type Size = 'cover' | 'contain' | 'auto';
 
 type Direction = 'normal' | 'reverse';
 
+type Repeat = 'no-repeat' | undefined;
 interface Options {
     frames: Frame[],
     canvas: HTMLCanvasElement | string,
@@ -11,6 +12,7 @@ interface Options {
     height: number | string,
     size: Size,
     sizeCanvasToImage: boolean;
+    repeat?: Repeat;
     autoplay?: boolean,
     speed?: number,
     loop?: boolean,
@@ -27,10 +29,14 @@ TODO: add pause() - done
 TODO: replace direction setter with setDirection() method, cleaner - done
 TODO: implement play() fallback if frames aren't loaded yet - done
 TODO: calculate size based on cover/contain/auto
-TODO: implement tick() and speed property to control player speed
+TODO: implement tick() and speed property to control animation speed
 TODO: implement seek(), calculate progress in percentages?
-TODO: add event methods (onComplete, onLoopComplete, onEnterFrame, onSegmentStart)
+TODO: add count for loops
+TODO: add event methods (onComplete, onLoopComplete, onEnterFrame)
+TODO: add progressive loading
 TODO: experiment with DOM events as well 
+TODO: implement sizeCanvasToImage
+TODO: add batched loading, or option to load in chunks
 */
 class SequencerBase implements Options {
     canvas!: HTMLCanvasElement; // Assigned in setupOptions
@@ -39,12 +45,15 @@ class SequencerBase implements Options {
     height: number = 0;
     frames: Frame[] = [];
     autoplay: boolean = false;
-    sizeCanvasToImage: boolean = false;
     size: Size = 'cover';
+    sizeCanvasToImage: boolean = false;
+    repeat: Repeat = undefined;
     lastFrameIndex: number = 0;
     firstFrameIndex: number = 0;
     loop: boolean = false;
     debug: boolean = true;
+    _repeatCount: number = 0;
+    _repeatDirection: 'x' | 'y' = 'x';
     _direction: Direction = 'normal';
     _framesLoaded: boolean = false;
     _frameWidth: number = 0;
@@ -86,6 +95,10 @@ class SequencerBase implements Options {
 
         this.width = Number(options.width);
         this.height = Number(options.height);
+
+        this.size = options.size;
+
+        this.repeat = options.repeat === 'no-repeat' ? 'no-repeat' : undefined;
 
         this.frames = options.frames;
 
@@ -141,46 +154,15 @@ class SequencerBase implements Options {
     }
 
     resizeCanvas() {
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
 
         this._frameWidth = this.frames[0] instanceof HTMLImageElement ? this.frames[0].width : 0;
         this._frameHeight = this.frames[0] instanceof HTMLImageElement ? this.frames[0].height : 0;
+
+        const widthRatio = this._frameWidth / this.width;
+        const heightRatio = this._frameHeight / this.height;
         if (this.size === 'cover') {
-
-            // if (this._drawWidth === this.width) {
-            //     this._dWidth = this.width;
-            // }
-            // if (this._drawWidth < this.width) {
-            //     this._dWidth = this._drawWidth;
-            // }
-            // if (this._drawWidth > this.width) {
-            //     this._dWidth = this.width;
-            // }
-
-            // if (this._drawHeight === this.height) {
-            //     this._dHeight = this.height;
-            // }
-            // if (this._drawHeight < this.height) {
-            //     this._dHeight = this._drawHeight;
-            // }
-            // if (this._drawHeight > this.height) {
-            //     this._dHeight = this.height;
-            // }
-
-            // ratio of canvas width to image width
-            // ratio of canvas height to image height
-            // if(ratio of width is < ratio of height) {
-            // imagewidth = canvaswidth
-            // imageheight = imageheight / ratio of width;
-            // } else {
-            //         imageheight = canvasheight
-            //          imagewidth = imagewidth / ratio of height; 
-            //}
-
-            const widthRatio = this._frameWidth / this.width;
-            const heightRatio = this._frameHeight / this.height;
-            console.log('canvas width:', this.width, 'canvas height:', this.height)
-            console.log('image width:', this._frameWidth, 'image height:', this._frameHeight)
-            console.log('width ratio:', widthRatio, 'height ratio:', heightRatio);
             if (widthRatio < heightRatio) {
                 this._frameWidth = this.width;
                 this._frameHeight = this._frameHeight / widthRatio;
@@ -188,11 +170,23 @@ class SequencerBase implements Options {
                 this._frameHeight = this.height;
                 this._frameWidth = this._frameWidth / heightRatio;
             }
-
+        } else if (this.size === 'contain') {
+            if (widthRatio > heightRatio) {
+                this._frameWidth = this.width;
+                this._frameHeight = this._frameHeight / widthRatio;
+                if (this.repeat !== 'no-repeat') {
+                    this._repeatCount = widthRatio;
+                    this._repeatDirection = 'x';
+                }
+            } else {
+                this._frameHeight = this.height;
+                this._frameWidth = this._frameWidth / heightRatio;
+                if (this.repeat !== 'no-repeat') {
+                    this._repeatCount = heightRatio;
+                    this._repeatDirection = 'y';
+                }
+            }
         }
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
-
     }
 
     load() {
@@ -226,15 +220,20 @@ class SequencerBase implements Options {
     play(): void | boolean {
         if (!this._framesLoaded) return this.autoplay = true;
 
-        if (this.currentFrame === this.lastFrameIndex) {
+        if (this.currentFrame > this.lastFrameIndex) {
             this.stop();
 
             if (this.loop) return this.play();
             return;
         }
 
-        // this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, 0)
-        this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, 0, this._frameWidth, this._frameHeight)
+        for (let i = 0; i < this._repeatCount + 1; i++) {
+            if (this._repeatDirection === 'x') {
+                this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, i * this._frameHeight, this._frameWidth, this._frameHeight)
+            } else {
+                this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, i * this._frameWidth, 0, this._frameWidth, this._frameHeight)
+            }
+        }
         this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
         this.currentRAF = requestAnimationFrame(this.play.bind(this))
     }
