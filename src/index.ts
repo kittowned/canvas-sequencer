@@ -28,7 +28,8 @@ TODO: add stop() - done
 TODO: add pause() - done
 TODO: replace direction setter with setDirection() method, cleaner - done
 TODO: implement play() fallback if frames aren't loaded yet - done
-TODO: calculate size based on cover/contain/auto
+TODO: calculate size based on cover/contain - done
+TODO: make width and height optional so canvas size can be set from css - done
 TODO: implement tick() and speed property to control animation speed
 TODO: implement seek(), calculate progress in percentages?
 TODO: add count for loops
@@ -37,6 +38,9 @@ TODO: add progressive loading
 TODO: experiment with DOM events as well 
 TODO: implement sizeCanvasToImage
 TODO: add batched loading, or option to load in chunks
+TODO: add option to segment the frames into groups 
+TODO: add tiling in x and y planes
+TODO: check cover calculation values, make sure there are no over/under flows
 */
 class SequencerBase implements Options {
     canvas!: HTMLCanvasElement; // Assigned in setupOptions
@@ -93,12 +97,12 @@ class SequencerBase implements Options {
         this.canvas = this.initCanvas(options.canvas);
         this.ctx = this.canvas.getContext('2d');
 
-        this.width = Number(options.width);
-        this.height = Number(options.height);
+        this.canvas.width = options.width ? Number(options.width) : this.canvas.getBoundingClientRect().width;
+        this.canvas.height = options.height ? Number(options.height) : this.canvas.getBoundingClientRect().height;
 
         this.size = options.size;
 
-        this.repeat = options.repeat === 'no-repeat' ? 'no-repeat' : undefined;
+        this.repeat = options.repeat ? options.repeat : undefined;
 
         this.frames = options.frames;
 
@@ -154,34 +158,31 @@ class SequencerBase implements Options {
     }
 
     resizeCanvas() {
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
-
         this._frameWidth = this.frames[0] instanceof HTMLImageElement ? this.frames[0].width : 0;
         this._frameHeight = this.frames[0] instanceof HTMLImageElement ? this.frames[0].height : 0;
 
-        const widthRatio = this._frameWidth / this.width;
-        const heightRatio = this._frameHeight / this.height;
+        const widthRatio = this._frameWidth / this.canvas.width
+        const heightRatio = this._frameHeight / this.canvas.height;
         if (this.size === 'cover') {
             if (widthRatio < heightRatio) {
-                this._frameWidth = this.width;
+                this._frameWidth = this.canvas.width;
                 this._frameHeight = this._frameHeight / widthRatio;
             } else {
-                this._frameHeight = this.height;
+                this._frameHeight = this.canvas.height;
                 this._frameWidth = this._frameWidth / heightRatio;
             }
         } else if (this.size === 'contain') {
             if (widthRatio > heightRatio) {
-                this._frameWidth = this.width;
+                this._frameWidth = this.canvas.width;
                 this._frameHeight = this._frameHeight / widthRatio;
-                if (this.repeat !== 'no-repeat') {
+                if (this.repeat === undefined) {
                     this._repeatCount = widthRatio;
                     this._repeatDirection = 'x';
                 }
             } else {
-                this._frameHeight = this.height;
+                this._frameHeight = this.canvas.height;
                 this._frameWidth = this._frameWidth / heightRatio;
-                if (this.repeat !== 'no-repeat') {
+                if (this.repeat === undefined) {
                     this._repeatCount = heightRatio;
                     this._repeatDirection = 'y';
                 }
@@ -237,6 +238,7 @@ class SequencerBase implements Options {
         this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
         this.currentRAF = requestAnimationFrame(this.play.bind(this))
     }
+
 
     replay() {
         this.stop();
