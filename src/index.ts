@@ -1,6 +1,6 @@
 import { Frame } from 'Frame';
 
-type Size = 'cover' | 'contain' | 'auto';
+type Size = 'cover' | 'contain';
 
 type Direction = 'normal' | 'reverse';
 
@@ -18,6 +18,7 @@ interface Options {
     loop?: boolean,
     direction?: Direction,
     debug?: boolean,
+    fps?: number,
     onLoaded?: Function;
     onComplete?: Function;
     onPaused?: Function;
@@ -30,8 +31,10 @@ TODO: replace direction setter with setDirection() method, cleaner - done
 TODO: implement play() fallback if frames aren't loaded yet - done
 TODO: calculate size based on cover/contain - done
 TODO: make width and height optional so canvas size can be set from css - done
-TODO: implement tick() and speed property to control animation speed
+TODO: implement tick() and speed property to control animation speed - done
 TODO: implement seek(), calculate progress in percentages?
+TODO: fix bug - revere direction no longer works
+TODO: fix bug - autoplay = false not working
 TODO: add count for loops
 TODO: add event methods (onComplete, onLoopComplete, onEnterFrame)
 TODO: add progressive loading
@@ -64,6 +67,8 @@ class SequencerBase implements Options {
     _frameHeight: number = 0;
     _dWidth: number = 0;
     _dHeight: number = 0;
+    _lastTick: DOMHighResTimeStamp = 0;
+    _fps: number = 60;
     onLoaded?: Function;
     onComplete?: Function;
     onPaused?: Function;
@@ -77,12 +82,11 @@ class SequencerBase implements Options {
         if (direction === 'normal') {
             this.lastFrameIndex = this.frames.length - 1;
             this.firstFrameIndex = 0;
-            if (this.debug) console.log('direction was set', this.lastFrameIndex);
         } else {
             this.lastFrameIndex = 0;
             this.firstFrameIndex = this.frames.length - 1;
-            if (this.debug) console.log('direction was set', this.lastFrameIndex);
         }
+        if (this.debug) console.log('direction was set', this.lastFrameIndex);
     }
 
     private currentFrame = 0;
@@ -105,6 +109,8 @@ class SequencerBase implements Options {
         this.repeat = options.repeat ? options.repeat : undefined;
 
         this.frames = options.frames;
+
+        this._fps = options.fps ? options.fps : 60;
 
         this.loop = typeof options.loop === 'boolean' ? options.loop : false;
         this.autoplay = typeof options.autoplay === 'boolean' ? options.autoplay : true;
@@ -218,7 +224,7 @@ class SequencerBase implements Options {
         });
     }
 
-    play(): void | boolean {
+    play(time?: DOMHighResTimeStamp): void | boolean {
         if (!this._framesLoaded) return this.autoplay = true;
 
         if (this.currentFrame > this.lastFrameIndex) {
@@ -235,10 +241,20 @@ class SequencerBase implements Options {
                 this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, i * this._frameWidth, 0, this._frameWidth, this._frameHeight)
             }
         }
-        this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
+        this.tick(time);
         this.currentRAF = requestAnimationFrame(this.play.bind(this))
     }
 
+    tick(time?: DOMHighResTimeStamp) {
+        const _time = time ? time : document.timeline.currentTime as DOMHighResTimeStamp;
+        const tickRate = Math.floor((1000 / this._fps) * 100) / 100;
+        const deltaTime = _time - this._lastTick;
+
+        if (deltaTime < tickRate) return;
+
+        this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
+        this._lastTick = _time;
+    }
 
     replay() {
         this.stop();
