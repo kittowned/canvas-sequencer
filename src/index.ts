@@ -5,6 +5,7 @@ type Size = 'cover' | 'contain';
 type Direction = 'normal' | 'reverse';
 
 type Repeat = 'no-repeat' | undefined;
+
 interface Options {
     frames: Frame[],
     canvas: HTMLCanvasElement | string,
@@ -31,8 +32,9 @@ TODO: replace direction setter with setDirection() method, cleaner - done
 TODO: implement play() fallback if frames aren't loaded yet - done
 TODO: calculate size based on cover/contain - done
 TODO: make width and height optional so canvas size can be set from css - done
-TODO: implement tick() and speed property to control animation speed - done
-TODO: implement seek(), calculate progress in percentages?
+TODO: implement tick() and fps property to control animation speed - done
+TODO: implement seek(), calculate progress in percentages - done
+TODO: fix bug - when seeking to last frame stop() is called and no further seeking is possible
 TODO: fix bug - revere direction no longer works
 TODO: fix bug - autoplay = false not working
 TODO: add count for loops
@@ -41,6 +43,7 @@ TODO: add progressive loading
 TODO: experiment with DOM events as well 
 TODO: implement sizeCanvasToImage
 TODO: add batched loading, or option to load in chunks
+TODO: add tests
 TODO: add option to segment the frames into groups 
 TODO: add tiling in x and y planes
 TODO: check cover calculation values, make sure there are no over/under flows
@@ -224,16 +227,37 @@ class SequencerBase implements Options {
         });
     }
 
-    play(time?: DOMHighResTimeStamp): void | boolean {
-        if (!this._framesLoaded) return this.autoplay = true;
+    play(time?: DOMHighResTimeStamp): void {
+        if (this._framesLoaded) {
+            if (this.currentFrame > this.lastFrameIndex) {
+                this.stop();
 
-        if (this.currentFrame > this.lastFrameIndex) {
-            this.stop();
-
-            if (this.loop) return this.play();
-            return;
+                if (this.loop) return this.play();
+                return;
+            }
+            this.render();
+            this.tick(time);
         }
+        this.currentRAF = requestAnimationFrame(this.play.bind(this))
+    }
 
+    seek(position: number) {
+        // Accepted values are: 
+        // 0.33 (number as percentage) 
+        // 124 (number as frame index) 
+        if (!position) throw new Error(`Invalid seek position supplied ${position}`);
+
+        const pos = typeof position === 'string' ? Number(position) : position;
+        pos % 1 === 0 ? this.updateFrame(Number(pos)) : this.updateFrame(Math.round(this.frames.length * pos));
+    }
+
+    updateFrame(frame?: number) {
+        if (frame) this.currentFrame = frame;
+        else this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
+        return;
+    }
+
+    render() {
         for (let i = 0; i < this._repeatCount + 1; i++) {
             if (this._repeatDirection === 'x') {
                 this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, 0, i * this._frameHeight, this._frameWidth, this._frameHeight)
@@ -241,8 +265,6 @@ class SequencerBase implements Options {
                 this.ctx?.drawImage(this.frames[this.currentFrame] as HTMLImageElement, i * this._frameWidth, 0, this._frameWidth, this._frameHeight)
             }
         }
-        this.tick(time);
-        this.currentRAF = requestAnimationFrame(this.play.bind(this))
     }
 
     tick(time?: DOMHighResTimeStamp) {
@@ -252,8 +274,9 @@ class SequencerBase implements Options {
 
         if (deltaTime < tickRate) return;
 
-        this._direction === 'normal' ? this.currentFrame++ : this.currentFrame--;
         this._lastTick = _time;
+
+        this.updateFrame();
     }
 
     replay() {
